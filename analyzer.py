@@ -230,7 +230,6 @@ def _label_point(
         return None
     lo30 = min(valid)
     hi30 = max(valid)
-    price_range = hi30 - lo30
 
     near_low  = (current - lo30) <= TROUGH_TOLERANCE * lo30 if lo30 > 0 else False
     near_high = (hi30 - current) <= TROUGH_TOLERANCE * hi30 if hi30 > 0 else False
@@ -482,9 +481,12 @@ def run_analysis() -> AnalysisReport:
         if sig is None:
             continue
 
-        if   sig.signal == "BUY":  report.buys.append(sig)
-        elif sig.signal == "SELL": report.sells.append(sig)
-        elif sig.signal == "HOLD": report.holds.append(sig)
+        if sig.signal == "BUY":
+            report.buys.append(sig)
+        elif sig.signal == "SELL":
+            report.sells.append(sig)
+        elif sig.signal == "HOLD":
+            report.holds.append(sig)
 
     n = config.MAX_ITEMS_PER_SECTION
     report.buys  = sorted(report.buys,  key=lambda s: s.confidence, reverse=True)[:n]

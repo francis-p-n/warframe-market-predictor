@@ -201,18 +201,30 @@ def main():
     import database as db
     db.init_db()
 
-    if args.test_notify:       cmd_test_notify()
-    elif args.run_report:      cmd_run_report()
-    elif args.fetch_now:       cmd_fetch_now()
-    elif args.refresh_items:   cmd_refresh_items()
-    elif args.refresh_relics:  cmd_refresh_relics()
-    elif args.relics:          cmd_relics()
-    elif args.watchlist:       cmd_watchlist()
-    elif args.watchlist_add:   cmd_watchlist_add(args.watchlist_add)
-    elif args.watchlist_remove: cmd_watchlist_remove(args.watchlist_remove)
-    elif args.search:          cmd_search(args.search)
-    elif args.retrain:         cmd_retrain()
-    elif args.status:          cmd_status()
+    if args.test_notify:
+        cmd_test_notify()
+    elif args.run_report:
+        cmd_run_report()
+    elif args.fetch_now:
+        cmd_fetch_now()
+    elif args.refresh_items:
+        cmd_refresh_items()
+    elif args.refresh_relics:
+        cmd_refresh_relics()
+    elif args.relics:
+        cmd_relics()
+    elif args.watchlist:
+        cmd_watchlist()
+    elif args.watchlist_add:
+        cmd_watchlist_add(args.watchlist_add)
+    elif args.watchlist_remove:
+        cmd_watchlist_remove(args.watchlist_remove)
+    elif args.search:
+        cmd_search(args.search)
+    elif args.retrain:
+        cmd_retrain()
+    elif args.status:
+        cmd_status()
     else:
         # ── Background service ────────────────────────────────────────────────
         import config
