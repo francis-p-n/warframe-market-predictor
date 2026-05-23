@@ -1,6 +1,6 @@
 # 📊 Warframe Market Predictor
 
-> A lightweight Python background service that tracks real-time prices on [Warframe.market](https://warframe.market), runs statistical trend analysis, and sends a daily **WhatsApp summary** of the best items to buy, sell, or hold — completely hands-free.
+> A lightweight Python background service that tracks real-time prices on [Warframe.market](https://warframe.market), runs statistical trend analysis, and sends a daily **push notification** (via [ntfy.sh](https://ntfy.sh) — free, forever) with the best items to buy, sell, or hold.
 
 ---
 
@@ -8,36 +8,36 @@
 
 Warframe has a player-driven economy with thousands of tradable items. Prices fluctuate daily based on supply, demand, game updates, and player activity. This tool monitors those prices automatically and tells you when to act.
 
-Every morning at 9 AM, you get a WhatsApp message like this:
+Every morning at 9 AM, you get a push notification on your phone:
 
 ```
-📊 Warframe Market Daily — May 24, 2026
+Warframe Market May 24 — 2 buys, 1 sell, 1 hold
 
-🟢 TOP BUYS (price dip, trend rising)
-  • Rhino Prime Set — 145p  (30d avg 172p, -15.7%, confidence 81%)
-    Price dip (-15.7% vs 30d avg) with rising 7d trend (+0.6%/day). Volume 2.1x normal.
+## Buy Signals
+**Rhino Prime Set** — 145p  *(30d avg 172p, -15.7%, conf 81%)*
+  Price dip (-15.7% vs 30d avg) with rising 7d trend (+0.6%/day). Volume 2.1x normal.
 
-🔴 TOP SELLS (at peak, trend falling)
-  • Ignis Wraith Blueprint — 8p  (30d avg 5p, +60.0%, confidence 74%)
-    Price peaked (+60.0% above 30d avg), now falling (-0.8%/day). Volume 1.3x normal.
+## Sell Signals
+**Ignis Wraith Blueprint** — 8p  *(30d avg 5p, +60.0%, conf 74%)*
+  Price peaked (+60.0% above 30d avg), now falling (-0.8%/day). Volume 1.3x normal.
 
-🟡 HOLDS — WAIT (declining, low volume — likely temporary)
-  • Mesa Prime Chassis — 18p  (30d avg 22p, -18.2%, confidence 67%)
-    Price softening (-0.4%/day) but volume is low (0.4x 30d avg) — likely a low-activity dip.
+## Hold — Wait
+**Mesa Prime Chassis** — 18p  *(30d avg 22p, -18.2%, conf 67%)*
+  Price softening (-0.4%/day) but volume is low (0.4x 30d avg) — likely a temp dip.
 
-📈 847 items scanned · 12 signals generated
+*847 items scanned — 12 signals generated*
 ```
 
 ---
 
 ## Features
 
+- **Free forever** — uses [ntfy.sh](https://ntfy.sh), zero accounts or API keys needed
+- **Share with friends** — anyone who subscribes to your topic name gets the same alerts
 - **Auto-tracks top 50 items by trading volume** — no manual setup needed
 - **Custom watchlist** — pin any specific items you care about
 - **5-metric trend analysis** — slope, momentum, volume trend, volatility, moving averages
-- **Daily WhatsApp notifications** via Twilio (broadcast to multiple people)
 - **Extremely lightweight** — ~35 MB RAM, SQLite storage, no cloud dependencies
-- **Fully offline** — all data stored locally, only external calls are to Warframe.market API and Twilio
 - **Rate-limited API access** — stays well within warframe.market limits (2 req/s)
 - **Auto-recovers** — coalesces missed jobs if your PC was asleep
 
@@ -51,7 +51,7 @@ Every morning at 9 AM, you get a WhatsApp message like this:
 | Storage | SQLite (WAL mode) |
 | Scheduler | APScheduler |
 | HTTP client | httpx |
-| Notifications | Twilio WhatsApp API |
+| Notifications | ntfy.sh (free push notifications) |
 | Trend analysis | NumPy linear regression |
 | Config | python-dotenv |
 
@@ -59,22 +59,50 @@ Every morning at 9 AM, you get a WhatsApp message like this:
 
 ## Quick Start
 
+### 1. Install the ntfy app
+
+- **Android**: [Google Play](https://play.google.com/store/apps/details?id=io.heckel.ntfy)
+- **iOS**: [App Store](https://apps.apple.com/app/ntfy/id1625396347)
+- **Web**: `https://ntfy.sh/<your-topic>`
+
+### 2. Choose a secret topic name
+
+Pick something hard to guess — it's your notification "password":
+```
+warframe-predictor-k9x2mq7p
+```
+In the ntfy app, tap **+** and subscribe to it.
+
+### 3. Install dependencies
+
 ```bash
-# 1. Install dependencies
 pip install -r requirements.txt
 conda install numpy          # or: pip install numpy --only-binary=:all:
-
-# 2. Configure
-copy .env.example .env       # fill in Twilio credentials & your WhatsApp number(s)
-
-# 3. Verify notifications
-python main.py --test-notify
-
-# 4. Start the service
-python main.py
 ```
 
-See [README.md](README.md) for full setup guide including Twilio sandbox instructions.
+### 4. Configure
+
+```bash
+copy .env.example .env
+```
+
+Edit `.env` — set your topic name:
+```env
+NTFY_TOPIC=warframe-predictor-k9x2mq7p
+```
+
+### 5. Test and run
+
+```bash
+python main.py --test-notify    # push notification should appear on your phone
+python main.py                  # start the background service
+```
+
+---
+
+## Sharing with friends (group notifications)
+
+ntfy works like a private channel — anyone who subscribes to your topic receives all notifications. Just share your `NTFY_TOPIC` value with friends and have them subscribe in the ntfy app. No accounts, no invites, completely free.
 
 ---
 
@@ -82,9 +110,10 @@ See [README.md](README.md) for full setup guide including Twilio sandbox instruc
 
 ```bash
 python main.py                          # Start background service
-python main.py --test-notify            # Test WhatsApp delivery
+python main.py --test-notify            # Test push notification
 python main.py --run-report             # Send report right now
 python main.py --fetch-now              # Trigger data fetch
+python main.py --refresh-items          # Re-download full item list
 python main.py --search "rhino prime"   # Find items by name
 python main.py --watchlist-add "Adaptation"   # Add to watchlist
 python main.py --watchlist              # View watchlist
@@ -101,25 +130,42 @@ python main.py --status                 # Database stats
 | 🔴 **SELL** | 7-day slope < -0.3%/day AND price > 3% above 30-day MA AND volume ≥ 70% of normal |
 | 🟡 **HOLD** | Slope negative AND volume < 60% of normal (low-activity dip, not a crash) |
 
-Only signals above 55% confidence are included in reports (configurable).
+Only signals above **55% confidence** are included in reports (configurable via `MIN_SIGNAL_CONFIDENCE`).
 
 ---
 
-## WhatsApp Group Support
+## Running as a Background Service (Windows)
 
-WhatsApp's Business API doesn't support sending to native group chats. As a workaround, set `WHATSAPP_TO` to a comma-separated list of numbers — each person receives the daily report individually:
+**Task Scheduler (built-in):**
+1. Open Task Scheduler → Create Basic Task
+2. Trigger: **At log on**
+3. Action: `python` with argument path to `main.py`
 
-```env
-WHATSAPP_TO=whatsapp:+601XXXXXXXXX,whatsapp:+601YYYYYYYYY
+**NSSM (recommended — always-on service):**
+```bash
+# Download nssm from https://nssm.cc/
+nssm install WarframePredictor python "C:\path\to\main.py"
+nssm start WarframePredictor
 ```
 
-> Each recipient needs to join the Twilio sandbox once by sending the join code from their own WhatsApp.
+---
+
+## Resource Usage
+
+| Resource | Usage |
+|---|---|
+| RAM | ~35–60 MB (idle) |
+| CPU | < 0.1% between fetch cycles |
+| Disk | ~5–20 MB per month |
+| Network | ~2–4 MB per fetch cycle (every 4h) |
 
 ---
 
-## Disclaimer
+## Data & Privacy
 
-This tool is for informational purposes only. Warframe market prices are unpredictable and no signal is guaranteed. Trade at your own risk.
+All data is stored **locally** in `data/warframe_prices.db` (SQLite).
+ntfy notifications are sent over HTTPS. Your topic name acts as a private token.
+For full privacy, you can [self-host ntfy](https://docs.ntfy.sh/install/) and set `NTFY_SERVER` in `.env`.
 
 ---
 

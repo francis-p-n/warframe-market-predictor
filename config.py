@@ -23,20 +23,14 @@ def _optional(key: str, default: str) -> str:
     return os.getenv(key, default)
 
 
-# ─── Twilio ────────────────────────────────────────────────────────────────────
-TWILIO_ACCOUNT_SID: str = _require("TWILIO_ACCOUNT_SID")
-TWILIO_AUTH_TOKEN: str = _require("TWILIO_AUTH_TOKEN")
-TWILIO_WHATSAPP_FROM: str = _optional(
-    "TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886"
-)
-# Comma-separated list of WhatsApp numbers to notify (broadcast to multiple people)
-# e.g. whatsapp:+601XXXXXXXXX,whatsapp:+601YYYYYYYYY
-WHATSAPP_TO: list[str] = [
-    n.strip()
-    for n in _require("WHATSAPP_TO").split(",")
-    if n.strip()
-]
+# ─── ntfy.sh ───────────────────────────────────────────────────────────────────
+# Your private topic name — make it hard to guess (treat it like a password).
+# Anyone who knows this topic name can subscribe to your notifications.
+# Example: warframe-predictor-k9x2mq7p
+NTFY_TOPIC: str = _require("NTFY_TOPIC")
 
+# ntfy server — use the public server or a self-hosted instance
+NTFY_SERVER: str = _optional("NTFY_SERVER", "https://ntfy.sh")
 
 # ─── Schedule ──────────────────────────────────────────────────────────────────
 REPORT_TIME: str = _optional("REPORT_TIME", "09:00")          # HH:MM
