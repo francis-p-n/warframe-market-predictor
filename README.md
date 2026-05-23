@@ -1,167 +1,128 @@
 # 📊 Warframe Market Predictor
 
-A lightweight Python background service that monitors [Warframe.market](https://warframe.market) prices, runs trend analysis, and sends you a **daily WhatsApp summary** with the best buys, sells, and holds.
-
-- 🟢 **BUY** — price dip with a rising trend (oversold, good entry point)
-- 🔴 **SELL** — price peaked and falling (overbought, time to unload)
-- 🟡 **HOLD** — price falling but volume is low (likely a temp dip, be patient)
+> A lightweight Python background service that tracks real-time prices on [Warframe.market](https://warframe.market), runs statistical trend analysis, and sends a daily **WhatsApp summary** of the best items to buy, sell, or hold — completely hands-free.
 
 ---
 
-## Requirements
+## What it does
 
-- Python 3.11+
-- A free [Twilio](https://twilio.com) account
-- A WhatsApp account on your phone
+Warframe has a player-driven economy with thousands of tradable items. Prices fluctuate daily based on supply, demand, game updates, and player activity. This tool monitors those prices automatically and tells you when to act.
+
+Every morning at 9 AM, you get a WhatsApp message like this:
+
+```
+📊 Warframe Market Daily — May 24, 2026
+
+🟢 TOP BUYS (price dip, trend rising)
+  • Rhino Prime Set — 145p  (30d avg 172p, -15.7%, confidence 81%)
+    Price dip (-15.7% vs 30d avg) with rising 7d trend (+0.6%/day). Volume 2.1x normal.
+
+🔴 TOP SELLS (at peak, trend falling)
+  • Ignis Wraith Blueprint — 8p  (30d avg 5p, +60.0%, confidence 74%)
+    Price peaked (+60.0% above 30d avg), now falling (-0.8%/day). Volume 1.3x normal.
+
+🟡 HOLDS — WAIT (declining, low volume — likely temporary)
+  • Mesa Prime Chassis — 18p  (30d avg 22p, -18.2%, confidence 67%)
+    Price softening (-0.4%/day) but volume is low (0.4x 30d avg) — likely a low-activity dip.
+
+📈 847 items scanned · 12 signals generated
+```
 
 ---
 
-## Setup (5 minutes)
+## Features
 
-### 1. Install dependencies
+- **Auto-tracks top 50 items by trading volume** — no manual setup needed
+- **Custom watchlist** — pin any specific items you care about
+- **5-metric trend analysis** — slope, momentum, volume trend, volatility, moving averages
+- **Daily WhatsApp notifications** via Twilio (broadcast to multiple people)
+- **Extremely lightweight** — ~35 MB RAM, SQLite storage, no cloud dependencies
+- **Fully offline** — all data stored locally, only external calls are to Warframe.market API and Twilio
+- **Rate-limited API access** — stays well within warframe.market limits (2 req/s)
+- **Auto-recovers** — coalesces missed jobs if your PC was asleep
+
+---
+
+## Tech Stack
+
+| Component | Technology |
+|---|---|
+| Language | Python 3.11+ |
+| Storage | SQLite (WAL mode) |
+| Scheduler | APScheduler |
+| HTTP client | httpx |
+| Notifications | Twilio WhatsApp API |
+| Trend analysis | NumPy linear regression |
+| Config | python-dotenv |
+
+---
+
+## Quick Start
 
 ```bash
+# 1. Install dependencies
 pip install -r requirements.txt
-```
+conda install numpy          # or: pip install numpy --only-binary=:all:
 
-### 2. Set up Twilio WhatsApp Sandbox (free)
+# 2. Configure
+copy .env.example .env       # fill in Twilio credentials & your WhatsApp number(s)
 
-1. Sign up at [twilio.com](https://twilio.com) — no credit card required for the sandbox
-2. Go to **Console → Messaging → Try it out → Send a WhatsApp message**
-3. Follow the instructions to join the sandbox by sending a code from your phone to Twilio's WhatsApp number (`+1 415 523 8886`)
-4. Copy your **Account SID** and **Auth Token** from the Console dashboard
-
-### 3. Configure `.env`
-
-```bash
-copy .env.example .env
-```
-
-Edit `.env` and fill in:
-```env
-TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
-WHATSAPP_TO=whatsapp:+60XXXXXXXXXX    # Your number, intl format
-```
-
-> **Malaysia example:** `whatsapp:+601XXXXXXXXX`  
-> **USA example:** `whatsapp:+1XXXXXXXXXX`
-
-### 4. Test your setup
-
-```bash
+# 3. Verify notifications
 python main.py --test-notify
-```
 
-You should receive a WhatsApp message within seconds.
-
-### 5. Run the service
-
-```bash
+# 4. Start the service
 python main.py
 ```
 
-On first launch it will automatically download the full Warframe item list (~3,000 items), then start collecting price data. The first daily report will arrive at 9 AM the next morning.
+See [README.md](README.md) for full setup guide including Twilio sandbox instructions.
 
 ---
 
-## Daily Commands
-
-| Command | What it does |
-|---|---|
-| `python main.py` | Start the background service |
-| `python main.py --test-notify` | Send a test WhatsApp message |
-| `python main.py --run-report` | Run analysis + send report right now |
-| `python main.py --fetch-now` | Trigger a data fetch immediately |
-| `python main.py --refresh-items` | Re-download full item list |
-| `python main.py --status` | Show database stats |
-
-## Watchlist Commands
-
-The service auto-tracks the top 50 items by trading volume. You can also pin specific items:
+## CLI Commands
 
 ```bash
-# Search for an item
-python main.py --search "rhino prime"
-
-# Add to your watchlist
-python main.py --watchlist-add "Rhino Prime Set"
-
-# View your watchlist
-python main.py --watchlist
-
-# Remove from watchlist
-python main.py --watchlist-remove "Rhino Prime Set"
+python main.py                          # Start background service
+python main.py --test-notify            # Test WhatsApp delivery
+python main.py --run-report             # Send report right now
+python main.py --fetch-now              # Trigger data fetch
+python main.py --search "rhino prime"   # Find items by name
+python main.py --watchlist-add "Adaptation"   # Add to watchlist
+python main.py --watchlist              # View watchlist
+python main.py --status                 # Database stats
 ```
 
 ---
 
-## How the Analysis Works
+## How Signals Work
 
-For each item, the service computes:
-
-| Metric | Description |
+| Signal | Condition |
 |---|---|
-| **Short slope** | 7-day linear regression slope (% per day) |
-| **Long slope** | 30-day linear regression slope |
-| **Momentum** | Current price vs 30-day moving average (% deviation) |
-| **Volume trend** | Recent 7d volume vs 30d average (ratio) |
-| **Volatility** | Coefficient of variation over 14 days |
+| 🟢 **BUY** | 7-day slope > +0.3%/day AND price > 3% below 30-day MA |
+| 🔴 **SELL** | 7-day slope < -0.3%/day AND price > 3% above 30-day MA AND volume ≥ 70% of normal |
+| 🟡 **HOLD** | Slope negative AND volume < 60% of normal (low-activity dip, not a crash) |
 
-**Signal rules:**
-- 🟢 **BUY**: Short slope > +0.3%/day AND price > 3% below 30d average
-- 🔴 **SELL**: Short slope < -0.3%/day AND price > 3% above 30d average AND volume ≥ 70% of normal
-- 🟡 **HOLD**: Slope negative AND volume < 60% of normal (low-activity dip)
-
-All signals include a **confidence score** (0–100%). Only signals above 55% confidence are reported. Tune `MIN_SIGNAL_CONFIDENCE` in `.env` to be stricter or more permissive.
+Only signals above 55% confidence are included in reports (configurable).
 
 ---
 
-## Running as a Background Service (Windows)
+## WhatsApp Group Support
 
-To keep it running after closing the terminal, create a scheduled task or use NSSM:
+WhatsApp's Business API doesn't support sending to native group chats. As a workaround, set `WHATSAPP_TO` to a comma-separated list of numbers — each person receives the daily report individually:
 
-### Option A: Task Scheduler (built-in)
-1. Open **Task Scheduler** → Create Basic Task
-2. Set trigger: **At log on**
-3. Action: **Start a program** → `python` with argument `"C:\path\to\main.py"` in the project directory
-
-### Option B: NSSM (recommended for always-on)
-```bash
-# Download nssm from https://nssm.cc/
-nssm install WarframePredictor python "C:\path\to\main.py"
-nssm start WarframePredictor
+```env
+WHATSAPP_TO=whatsapp:+601XXXXXXXXX,whatsapp:+601YYYYYYYYY
 ```
 
----
-
-## Resource Usage
-
-- **RAM**: ~35–60 MB when idle
-- **CPU**: Negligible (< 0.1% between fetch cycles)
-- **Disk**: ~5–20 MB per month of price history
-- **Network**: ~2–4 MB per fetch cycle (every 4 hours)
+> Each recipient needs to join the Twilio sandbox once by sending the join code from their own WhatsApp.
 
 ---
 
-## Upgrading to Production WhatsApp
+## Disclaimer
 
-The Twilio sandbox requires you to re-join periodically. For a permanent setup:
-
-1. Apply for a [Twilio WhatsApp Business number](https://www.twilio.com/whatsapp) (~$5/month)
-2. Get Meta approval (usually takes 2–5 business days)
-3. Update `TWILIO_WHATSAPP_FROM` in `.env` to your approved number
-
----
-
-## Data & Privacy
-
-All data is stored **locally** in `data/warframe_prices.db` (SQLite).  
-No personal data is collected. Only public Warframe.market pricing data is fetched.
+This tool is for informational purposes only. Warframe market prices are unpredictable and no signal is guaranteed. Trade at your own risk.
 
 ---
 
 ## License
 
-MIT — do whatever you like with it.
+MIT

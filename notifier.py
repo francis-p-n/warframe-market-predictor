@@ -27,22 +27,35 @@ def _get_client() -> Client:
     return _client
 
 
-def _send_whatsapp(body: str) -> bool:
+def _send_whatsapp(body: str, to: str) -> bool:
     """
-    Send a WhatsApp message via Twilio.
+    Send a WhatsApp message to a single recipient via Twilio.
     Returns True on success, False on failure.
     """
     try:
         msg = _get_client().messages.create(
             from_=config.TWILIO_WHATSAPP_FROM,
-            to=config.WHATSAPP_TO,
+            to=to,
             body=body,
         )
-        log.info("WhatsApp sent. SID: %s", msg.sid)
+        log.info("WhatsApp sent to %s. SID: %s", to, msg.sid)
         return True
     except TwilioRestException as exc:
-        log.error("Twilio error: %s", exc)
+        log.error("Twilio error sending to %s: %s", to, exc)
         return False
+
+
+def _broadcast(body: str) -> bool:
+    """
+    Send a message to ALL configured recipients.
+    Returns True only if every send succeeded.
+    """
+    if not config.WHATSAPP_TO:
+        log.error("No recipients configured in WHATSAPP_TO.")
+        return False
+    results = [_send_whatsapp(body, recipient) for recipient in config.WHATSAPP_TO]
+    log.info("Broadcast: %d/%d recipients succeeded.", sum(results), len(results))
+    return all(results)
 
 
 # ─── Message Formatting ────────────────────────────────────────────────────────
@@ -107,33 +120,33 @@ def build_daily_message(report: AnalysisReport) -> str:
 
 
 def send_daily_report(report: AnalysisReport) -> bool:
-    """Build and send the daily WhatsApp summary. Returns True on success."""
+    """Build and send the daily WhatsApp summary to all recipients."""
     if report.total_scanned == 0:
         log.warning("Report skipped — no items scanned yet.")
         return False
 
     message = build_daily_message(report)
 
-    # WhatsApp messages have a 1600-char limit in practice; split if needed
+    # WhatsApp messages have a ~1600-char practical limit; split if needed
     chunks = _split_message(message, max_len=1500)
     success = True
     for i, chunk in enumerate(chunks):
-        ok = _send_whatsapp(chunk)
+        ok = _broadcast(chunk)
         if not ok:
-            log.error("Failed to send message chunk %d/%d.", i + 1, len(chunks))
+            log.error("Failed to broadcast message chunk %d/%d.", i + 1, len(chunks))
             success = False
 
     return success
 
 
 def send_test_message() -> bool:
-    """Send a simple ping to verify the Twilio integration works."""
+    """Send a simple ping to ALL recipients to verify the Twilio integration."""
     body = (
-        "✅ *Warframe Market Predictor — test message*\n\n"
+        "*Warframe Market Predictor — test message*\n\n"
         "If you can read this, WhatsApp notifications are working correctly!\n\n"
         "_The daily report will arrive at the configured time each morning._"
     )
-    return _send_whatsapp(body)
+    return _broadcast(body)
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────

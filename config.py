@@ -29,7 +29,14 @@ TWILIO_AUTH_TOKEN: str = _require("TWILIO_AUTH_TOKEN")
 TWILIO_WHATSAPP_FROM: str = _optional(
     "TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886"
 )
-WHATSAPP_TO: str = _require("WHATSAPP_TO")
+# Comma-separated list of WhatsApp numbers to notify (broadcast to multiple people)
+# e.g. whatsapp:+601XXXXXXXXX,whatsapp:+601YYYYYYYYY
+WHATSAPP_TO: list[str] = [
+    n.strip()
+    for n in _require("WHATSAPP_TO").split(",")
+    if n.strip()
+]
+
 
 # ─── Schedule ──────────────────────────────────────────────────────────────────
 REPORT_TIME: str = _optional("REPORT_TIME", "09:00")          # HH:MM
