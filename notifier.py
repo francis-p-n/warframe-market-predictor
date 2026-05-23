@@ -26,7 +26,7 @@ COLORS = {
     "SELL":    0xED4245,   # red
     "HOLD":    0xFEE75C,   # yellow
     "DEFAULT": 0x5865F2,   # blurple
-    "INFO":    0x3BA55C,
+    "RELIC":   0xEB459E,   # pink
 }
 
 BOT_NAME   = "Warframe Market Bot"
@@ -58,17 +58,12 @@ def _broadcast(payload: dict) -> bool:
     return all(results)
 
 
-# ─── Embed Builders ───────────────────────────────────────────────────────────
+# ─── Market Signal Embeds ─────────────────────────────────────────────────────
 
 def _signal_field(sig: ItemSignal) -> dict:
-    """
-    Build a Discord embed field for one item signal.
-    Shows price context and the plain-English explanation — no jargon.
-    """
     mom_arrow = "▲" if sig.momentum_pct >= 0 else "▼"
     mom_sign  = "+" if sig.momentum_pct >= 0 else ""
 
-    # Price bar: show where current price sits in the 30d range
     price_range = sig.high_30d - sig.low_30d
     if price_range > 0:
         pct_in_range = (sig.current_price - sig.low_30d) / price_range
@@ -79,12 +74,13 @@ def _signal_field(sig: ItemSignal) -> dict:
         bar_label = f"`{sig.current_price:.0f}p`"
 
     value = (
-        f"**{sig.current_price:.0f}p**  {mom_arrow} {mom_sign}{sig.momentum_pct:.1f}% vs avg  "
-        f"· RSI {sig.rsi:.0f}  · vol {sig.vol_ratio:.1f}x\n"
+        f"**{sig.current_price:.0f}p**  {mom_arrow} {mom_sign}{sig.momentum_pct:.1f}% vs avg"
+        f"  · RSI {sig.rsi:.0f}  · vol {sig.vol_ratio:.1f}x\n"
         f"{bar_label}\n"
         f"*{sig.detail}*"
     )
-    return {"name": f"{'🟢' if sig.signal=='BUY' else '🔴' if sig.signal=='SELL' else '🟡'} {sig.item_name}", "value": value, "inline": False}
+    icon = "🟢" if sig.signal == "BUY" else "🔴" if sig.signal == "SELL" else "🟡"
+    return {"name": f"{icon} {sig.item_name}", "value": value, "inline": False}
 
 
 def _section_embed(
@@ -93,36 +89,71 @@ def _section_embed(
     color: int,
     empty_text: str,
 ) -> list[dict]:
-    """
-    Discord allows max 25 fields per embed and max 6000 chars total.
-    Split into multiple embeds if needed (10 items × ~200 chars each is fine in one).
-    """
     if not signals:
         return [{"title": title, "description": f"*{empty_text}*", "color": color}]
 
-    # Split into batches of 10 (Discord's 25-field limit is never hit at 10)
     embeds = []
     for batch_start in range(0, len(signals), 10):
         batch = signals[batch_start: batch_start + 10]
-        embed: dict = {
-            "color":  color,
-            "fields": [_signal_field(s) for s in batch],
-        }
+        embed: dict = {"color": color, "fields": [_signal_field(s) for s in batch]}
         if batch_start == 0:
             embed["title"] = title
         embeds.append(embed)
-
     return embeds
 
 
-# ─── Report Builder ───────────────────────────────────────────────────────────
+# ─── Relic Embed ──────────────────────────────────────────────────────────────
+
+def _relic_embed() -> Optional[dict]:
+    """Build the relic farming recommendations embed."""
+    try:
+        from relic_analyzer import get_top_relics
+        recs = get_top_relics(n=5)
+    except Exception as exc:
+        log.warning("Relic analysis failed: %s", exc)
+        return None
+
+    if not recs:
+        return {
+            "title":       "⚙️ Best Relics to Farm",
+            "description": "*No relic data yet — run `--refresh-relics` to load drop tables.*",
+            "color":       COLORS["RELIC"],
+        }
+
+    fields = []
+    for i, rec in enumerate(recs, 1):
+        farm = rec.farm_location
+        sorted_rewards = sorted(rec.rewards, key=lambda r: r.price, reverse=True)
+        drops_text = "  ".join(
+            f"{r.rarity[0]}:{r.item.split(' Blueprint')[0].split(' ')[-1]} {r.price:.0f}p"
+            for r in sorted_rewards[:3] if r.price > 0
+        ) or "No priced drops"
+
+        value = (
+            f"**~{rec.ev_intact:.1f}p/run** Intact · **~{rec.ev_radiant:.1f}p/run** Radiant"
+            f" · **~{rec.plat_per_hour_intact:.0f}p/hr**\n"
+            f"📍 {farm['node']} ({farm['type']}) — {farm['note']}\n"
+            f"Top drops: {drops_text}\n"
+            f"*{rec.recommendation}*"
+        )
+        fields.append({"name": f"#{i} {rec.full_name}", "value": value, "inline": False})
+
+    return {
+        "title":       "⚙️ Best Relics to Farm Right Now",
+        "description": "Ranked by expected plat/hour (Intact). Cross-referenced with live prices.",
+        "color":       COLORS["RELIC"],
+        "fields":      fields,
+    }
+
+
+# ─── Full Report Builder ──────────────────────────────────────────────────────
 
 def build_message(report: AnalysisReport) -> list[dict]:
     """Build the full list of Discord embeds for a daily report."""
     today = datetime.now().strftime("%A, %B %d")
 
     header = {
-        "title":       f"📊 Warframe Market — {today}",
+        "title": f"📊 Warframe Market — {today}",
         "description": (
             f"Scanned **{report.total_scanned}** items, found **{report.total_signals}** signals today.\n"
             f"*Model: {report.model_used} · Prices in platinum (p)*"
@@ -134,23 +165,24 @@ def build_message(report: AnalysisReport) -> list[dict]:
 
     embeds = [header]
     embeds += _section_embed(
-        "🟢 Best Buys  —  price at or near the bottom, likely to recover",
-        report.buys,
-        COLORS["BUY"],
+        "🟢 Best Buys  —  price at the bottom, likely to recover",
+        report.buys, COLORS["BUY"],
         "No clear buy opportunities today. Check back tomorrow.",
     )
     embeds += _section_embed(
         "🔴 Sell Now  —  price near peak, likely to drop",
-        report.sells,
-        COLORS["SELL"],
+        report.sells, COLORS["SELL"],
         "Nothing looks overpriced today.",
     )
     embeds += _section_embed(
         "🟡 Hold On  —  market is quiet, don't panic-sell",
-        report.holds,
-        COLORS["HOLD"],
+        report.holds, COLORS["HOLD"],
         "Nothing needs patience-watching today.",
     )
+
+    relic_emb = _relic_embed()
+    if relic_emb:
+        embeds.append(relic_emb)
 
     return embeds
 
@@ -164,14 +196,12 @@ def send_daily_report(report: AnalysisReport) -> bool:
 
     embeds = build_message(report)
 
-    # Discord: max 10 embeds per webhook POST
     success = True
     for i in range(0, len(embeds), 10):
-        batch   = embeds[i: i + 10]
         payload = {
             "username":   BOT_NAME,
             "avatar_url": BOT_AVATAR,
-            "embeds":     batch,
+            "embeds":     embeds[i: i + 10],
         }
         if not _broadcast(payload):
             success = False
@@ -190,8 +220,9 @@ def send_test_message() -> bool:
                 "The daily market report will appear in this channel at **9 AM** every morning.\n\n"
                 "**What you'll see each day:**\n"
                 "🟢 Best items to buy (caught at the price trough)\n"
-                "🔴 Items at peak price to sell\n"
-                "🟡 Items that look bad but are just in a quiet patch"
+                "🔴 Items at peak price — sell while you can\n"
+                "🟡 Items in a quiet patch — hold, don't panic-sell\n"
+                "⚙️ Best relics to farm for passive platinum income"
             ),
             "color": COLORS["BUY"],
             "footer": {"text": "warframe-market-predictor"},
