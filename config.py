@@ -9,7 +9,6 @@ load_dotenv()
 
 
 def _require(key: str) -> str:
-    """Read a required env var or raise a clear error."""
     val = os.getenv(key)
     if not val:
         raise EnvironmentError(
@@ -23,34 +22,33 @@ def _optional(key: str, default: str) -> str:
     return os.getenv(key, default)
 
 
-# ─── ntfy.sh ───────────────────────────────────────────────────────────────────
-# Your private topic name — make it hard to guess (treat it like a password).
-# Anyone who knows this topic name can subscribe to your notifications.
-# Example: warframe-predictor-k9x2mq7p
-NTFY_TOPIC: str = _require("NTFY_TOPIC")
-
-# ntfy server — use the public server or a self-hosted instance
-NTFY_SERVER: str = _optional("NTFY_SERVER", "https://ntfy.sh")
+# ─── Discord ───────────────────────────────────────────────────────────────────
+# Comma-separated webhook URLs (one per channel/server you want to post to)
+DISCORD_WEBHOOK_URLS: list[str] = [
+    u.strip()
+    for u in _require("DISCORD_WEBHOOK_URLS").split(",")
+    if u.strip()
+]
 
 # ─── Schedule ──────────────────────────────────────────────────────────────────
-REPORT_TIME: str = _optional("REPORT_TIME", "09:00")          # HH:MM
+REPORT_TIME: str          = _optional("REPORT_TIME", "09:00")
 FETCH_INTERVAL_HOURS: int = int(_optional("FETCH_INTERVAL_HOURS", "4"))
 
 # ─── Item Tracking ─────────────────────────────────────────────────────────────
-TOP_ITEMS_COUNT: int = int(_optional("TOP_ITEMS_COUNT", "50"))
+TOP_ITEMS_COUNT: int  = int(_optional("TOP_ITEMS_COUNT", "50"))
 MIN_VOLUME_FILTER: int = int(_optional("MIN_VOLUME_FILTER", "5"))
 
 # ─── Report ────────────────────────────────────────────────────────────────────
-MAX_ITEMS_PER_SECTION: int = int(_optional("MAX_ITEMS_PER_SECTION", "5"))
+MAX_ITEMS_PER_SECTION: int   = int(_optional("MAX_ITEMS_PER_SECTION", "10"))
 MIN_SIGNAL_CONFIDENCE: float = float(_optional("MIN_SIGNAL_CONFIDENCE", "0.55"))
 
-# ─── API ───────────────────────────────────────────────────────────────────────
-WF_API_BASE = "https://api.warframe.market/v1"
+# ─── Warframe Market API ───────────────────────────────────────────────────────
+WF_API_BASE     = "https://api.warframe.market/v1"
 WF_API_PLATFORM = "pc"
 WF_API_LANGUAGE = "en"
-WF_API_RATE_LIMIT = 2.0     # requests per second (API allows 3, we stay safe)
-WF_API_TIMEOUT = 20         # seconds
+WF_API_RATE_LIMIT = 2.0    # req/s (API allows 3, we stay safe)
+WF_API_TIMEOUT    = 20     # seconds
 
 # ─── Storage ───────────────────────────────────────────────────────────────────
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-DB_PATH = os.path.join(DATA_DIR, "warframe_prices.db")
+DB_PATH  = os.path.join(DATA_DIR, "warframe_prices.db")   # kept for legacy ref

@@ -192,49 +192,22 @@ def run_fetch_cycle() -> int:
 
 def seed_top_volume_items() -> None:
     """
-    Identify the top N items by recent trading volume from the items_cache
-    and ensure they are being tracked.
+    Identify the top N highest-volume items to auto-track.
 
-    We look at the last 7 days of stored snapshots and pick highest average
-    daily volume. On first run (empty DB), falls back to alphabetical top-N.
+    With CSV storage, get_tracked_items() already ranks items by how much
+    price data exists in data/prices/ — items with more history (i.e. the
+    ones we've been tracking longest and trading most) naturally sort to the
+    top. This function just validates the cache is populated.
     """
     all_items = db.get_all_cached_items()
     if not all_items:
         log.warning("Items cache is empty — run --refresh-items first.")
         return
 
-    n = config.TOP_ITEMS_COUNT
-    min_vol = config.MIN_VOLUME_FILTER
-
-    # Build volume map from recent snapshots (quick local query)
-    import sqlite3
-    import os
-    os.makedirs(config.DATA_DIR, exist_ok=True)
-    conn = sqlite3.connect(config.DB_PATH)
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        """
-        SELECT item_url, AVG(volume) as avg_vol
-        FROM price_snapshots
-        WHERE snap_date >= date('now', '-7 days')
-          AND volume >= ?
-        GROUP BY item_url
-        ORDER BY avg_vol DESC
-        LIMIT ?
-        """,
-        (min_vol, n),
-    ).fetchall()
-    conn.close()
-
-    vol_map = {r["item_url"]: r["avg_vol"] for r in rows}
-
-    # If we have volume data, use it; otherwise fall back to first N cached items
-    if vol_map:
-        top_urls = set(vol_map.keys())
-        top_items = [i for i in all_items if i["item_url"] in top_urls]
-    else:
-        top_items = all_items[:n]
-
-    # Store as tracked items (we reuse items_cache; tracked = cache + watchlist)
-    # Top-volume items are already in items_cache — no extra action needed here.
-    log.info("Top %d volume items identified for auto-tracking.", len(top_items))
+    tracked = db.get_tracked_items()
+    log.info(
+        "Auto-tracking %d items (top %d by data history + %d watchlist).",
+        len(tracked),
+        config.TOP_ITEMS_COUNT,
+        len(db.get_watchlist()),
+    )

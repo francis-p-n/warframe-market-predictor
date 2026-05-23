@@ -1,20 +1,17 @@
 """
-notifier.py — Send push notifications via ntfy.sh (free, forever).
+notifier.py — Discord webhook notifier with rich embeds.
 
-ntfy.sh requires zero account creation. You pick a secret topic name,
-subscribe to it in the ntfy app on your phone, and that's it.
+Setup (30 seconds):
+  1. Open your Discord server → pick a channel → Edit Channel
+  2. Integrations → Webhooks → New Webhook → Copy URL
+  3. Paste it into DISCORD_WEBHOOK_URLS in your .env
 
-App download:
-  Android: https://play.google.com/store/apps/details?id=io.heckel.ntfy
-  iOS:     https://apps.apple.com/app/ntfy/id1625396347
-  Web:     https://ntfy.sh/<your-topic>
-
-Multiple recipients: share your topic name with anyone — they subscribe
-in their own ntfy app and instantly receive the same notifications.
+Multiple channels: comma-separate the URLs to post to several channels at once.
 """
 
 import logging
 from datetime import datetime
+from typing import Optional
 
 import httpx
 
@@ -23,199 +20,181 @@ from analyzer import AnalysisReport, ItemSignal
 
 log = logging.getLogger(__name__)
 
-# ntfy.sh public server — you can also self-host
-NTFY_BASE_URL = "https://ntfy.sh"
+# Discord embed colour codes
+COLORS = {
+    "BUY":     0x57F287,   # green
+    "SELL":    0xED4245,   # red
+    "HOLD":    0xFEE75C,   # yellow
+    "DEFAULT": 0x5865F2,   # blurple
+    "INFO":    0x3BA55C,
+}
+
+BOT_NAME   = "Warframe Market Bot"
+BOT_AVATAR = "https://warframe.market/favicon.ico"
 
 
-# ─── Core Send ────────────────────────────────────────────────────────────────
+# ─── Core HTTP ────────────────────────────────────────────────────────────────
 
-def _send(
-    title: str,
-    body: str,
-    priority: str = "default",
-    tags: list[str] | None = None,
-) -> bool:
-    """
-    POST a notification to ntfy.sh.
-    Returns True on success, False on failure.
-
-    priority: "min" | "low" | "default" | "high" | "urgent"
-    tags:     emoji shortcodes shown as notification icon, e.g. ["chart_with_upwards_trend"]
-              Full list: https://docs.ntfy.sh/emojis/
-    """
-    url = f"{NTFY_BASE_URL}/{config.NTFY_TOPIC}"
-    headers = {
-        "Title": title,
-        "Priority": priority,
-        "Markdown": "yes",
-        "Content-Type": "text/plain; charset=utf-8",
-    }
-    if tags:
-        headers["Tags"] = ",".join(tags)
-
+def _post(url: str, payload: dict) -> bool:
     try:
-        resp = httpx.post(
-            url,
-            content=body.encode("utf-8"),
-            headers=headers,
-            timeout=15,
-        )
-        if resp.status_code == 200:
-            log.info("ntfy notification sent to topic '%s'.", config.NTFY_TOPIC)
+        resp = httpx.post(url, json=payload, timeout=15)
+        if resp.status_code in (200, 204):
+            log.info("Discord message delivered.")
             return True
-        log.error("ntfy returned HTTP %d: %s", resp.status_code, resp.text[:200])
+        log.error("Discord HTTP %d: %s", resp.status_code, resp.text[:300])
         return False
     except httpx.RequestError as exc:
-        log.error("ntfy request failed: %s", exc)
+        log.error("Discord request failed: %s", exc)
         return False
 
 
-# ─── Message Formatting ───────────────────────────────────────────────────────
+def _broadcast(payload: dict) -> bool:
+    """Send to ALL configured webhook URLs."""
+    if not config.DISCORD_WEBHOOK_URLS:
+        log.error("No DISCORD_WEBHOOK_URLS set in .env")
+        return False
+    results = [_post(url, payload) for url in config.DISCORD_WEBHOOK_URLS]
+    log.info("Broadcast: %d/%d webhooks succeeded.", sum(results), len(results))
+    return all(results)
 
-def _format_signal_line(sig: ItemSignal) -> str:
-    """Format a single item signal as a Markdown line for ntfy."""
-    mom_sign = "+" if sig.momentum_pct >= 0 else ""
-    conf_pct = f"{sig.confidence * 100:.0f}%"
-    return (
-        f"**{sig.item_name}** — {sig.current_price:.0f}p  "
-        f"*(30d avg {sig.avg_30d:.0f}p, {mom_sign}{sig.momentum_pct:.1f}%, "
-        f"conf {conf_pct})*\n"
-        f"  {sig.explanation}"
+
+# ─── Embed Builders ───────────────────────────────────────────────────────────
+
+def _signal_field(sig: ItemSignal) -> dict:
+    """
+    Build a Discord embed field for one item signal.
+    Shows price context and the plain-English explanation — no jargon.
+    """
+    mom_arrow = "▲" if sig.momentum_pct >= 0 else "▼"
+    mom_sign  = "+" if sig.momentum_pct >= 0 else ""
+
+    # Price bar: show where current price sits in the 30d range
+    price_range = sig.high_30d - sig.low_30d
+    if price_range > 0:
+        pct_in_range = (sig.current_price - sig.low_30d) / price_range
+        filled = round(pct_in_range * 10)
+        bar = "█" * filled + "░" * (10 - filled)
+        bar_label = f"`{sig.low_30d:.0f}p [{bar}] {sig.high_30d:.0f}p`"
+    else:
+        bar_label = f"`{sig.current_price:.0f}p`"
+
+    value = (
+        f"**{sig.current_price:.0f}p**  {mom_arrow} {mom_sign}{sig.momentum_pct:.1f}% vs avg  "
+        f"· RSI {sig.rsi:.0f}  · vol {sig.vol_ratio:.1f}x\n"
+        f"{bar_label}\n"
+        f"*{sig.detail}*"
+    )
+    return {"name": f"{'🟢' if sig.signal=='BUY' else '🔴' if sig.signal=='SELL' else '🟡'} {sig.item_name}", "value": value, "inline": False}
+
+
+def _section_embed(
+    title: str,
+    signals: list[ItemSignal],
+    color: int,
+    empty_text: str,
+) -> list[dict]:
+    """
+    Discord allows max 25 fields per embed and max 6000 chars total.
+    Split into multiple embeds if needed (10 items × ~200 chars each is fine in one).
+    """
+    if not signals:
+        return [{"title": title, "description": f"*{empty_text}*", "color": color}]
+
+    # Split into batches of 10 (Discord's 25-field limit is never hit at 10)
+    embeds = []
+    for batch_start in range(0, len(signals), 10):
+        batch = signals[batch_start: batch_start + 10]
+        embed: dict = {
+            "color":  color,
+            "fields": [_signal_field(s) for s in batch],
+        }
+        if batch_start == 0:
+            embed["title"] = title
+        embeds.append(embed)
+
+    return embeds
+
+
+# ─── Report Builder ───────────────────────────────────────────────────────────
+
+def build_message(report: AnalysisReport) -> list[dict]:
+    """Build the full list of Discord embeds for a daily report."""
+    today = datetime.now().strftime("%A, %B %d")
+
+    header = {
+        "title":       f"📊 Warframe Market — {today}",
+        "description": (
+            f"Scanned **{report.total_scanned}** items, found **{report.total_signals}** signals today.\n"
+            f"*Model: {report.model_used} · Prices in platinum (p)*"
+        ),
+        "color": COLORS["DEFAULT"],
+        "footer": {"text": "Prices from warframe.market · Next report at 9 AM"},
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+    embeds = [header]
+    embeds += _section_embed(
+        "🟢 Best Buys  —  price at or near the bottom, likely to recover",
+        report.buys,
+        COLORS["BUY"],
+        "No clear buy opportunities today. Check back tomorrow.",
+    )
+    embeds += _section_embed(
+        "🔴 Sell Now  —  price near peak, likely to drop",
+        report.sells,
+        COLORS["SELL"],
+        "Nothing looks overpriced today.",
+    )
+    embeds += _section_embed(
+        "🟡 Hold On  —  market is quiet, don't panic-sell",
+        report.holds,
+        COLORS["HOLD"],
+        "Nothing needs patience-watching today.",
     )
 
-
-def build_daily_message(report: AnalysisReport) -> str:
-    """Compose the full daily summary as Markdown for ntfy."""
-    lines: list[str] = []
-
-    # ── BUYs ──────────────────────────────────────────────────────────────────
-    if report.buys:
-        lines.append("## Buy Signals")
-        for sig in report.buys:
-            lines.append(_format_signal_line(sig))
-    else:
-        lines.append("## Buy Signals\n*No strong buy signals today.*")
-    lines.append("")
-
-    # ── SELLs ─────────────────────────────────────────────────────────────────
-    if report.sells:
-        lines.append("## Sell Signals")
-        for sig in report.sells:
-            lines.append(_format_signal_line(sig))
-    else:
-        lines.append("## Sell Signals\n*No strong sell signals today.*")
-    lines.append("")
-
-    # ── HOLDs ─────────────────────────────────────────────────────────────────
-    if report.holds:
-        lines.append("## Hold — Wait")
-        for sig in report.holds:
-            lines.append(_format_signal_line(sig))
-    else:
-        lines.append("## Hold — Wait\n*Nothing flagged as a patience play today.*")
-    lines.append("")
-
-    lines.append(
-        f"*{report.total_scanned} items scanned — "
-        f"{report.total_signals} signals generated*"
-    )
-
-    return "\n".join(lines)
-
-
-def _make_title(report: AnalysisReport) -> str:
-    today = datetime.now().strftime("%b %d")
-    b = len(report.buys)
-    s = len(report.sells)
-    h = len(report.holds)
-    parts = []
-    if b:
-        parts.append(f"{b} buy{'s' if b > 1 else ''}")
-    if s:
-        parts.append(f"{s} sell{'s' if s > 1 else ''}")
-    if h:
-        parts.append(f"{h} hold{'s' if h > 1 else ''}")
-    summary = ", ".join(parts) if parts else "no signals"
-    return f"Warframe Market {today} — {summary}"
-
-
-def _pick_priority(report: AnalysisReport) -> str:
-    """Use high priority when there are strong signals, default otherwise."""
-    if report.buys or report.sells:
-        return "high"
-    return "default"
-
-
-def _pick_tags(report: AnalysisReport) -> list[str]:
-    tags = ["chart_with_upwards_trend"]
-    if report.buys:
-        tags.append("green_circle")
-    if report.sells:
-        tags.append("red_circle")
-    return tags
+    return embeds
 
 
 # ─── Public API ───────────────────────────────────────────────────────────────
 
 def send_daily_report(report: AnalysisReport) -> bool:
-    """Build and send the daily push notification. Returns True on success."""
     if report.total_scanned == 0:
-        log.warning("Report skipped — no items scanned yet.")
+        log.warning("Report skipped — no data collected yet.")
         return False
 
-    body  = build_daily_message(report)
-    title = _make_title(report)
-    priority = _pick_priority(report)
-    tags = _pick_tags(report)
+    embeds = build_message(report)
 
-    # ntfy supports up to 4096 bytes per message; split if needed
-    chunks = _split_message(body, max_bytes=3800)
+    # Discord: max 10 embeds per webhook POST
     success = True
-    for i, chunk in enumerate(chunks):
-        chunk_title = title if i == 0 else f"{title} (cont.)"
-        ok = _send(chunk_title, chunk, priority=priority, tags=tags if i == 0 else None)
-        if not ok:
-            log.error("Failed to send notification chunk %d/%d.", i + 1, len(chunks))
+    for i in range(0, len(embeds), 10):
+        batch   = embeds[i: i + 10]
+        payload = {
+            "username":   BOT_NAME,
+            "avatar_url": BOT_AVATAR,
+            "embeds":     batch,
+        }
+        if not _broadcast(payload):
             success = False
 
     return success
 
 
 def send_test_message() -> bool:
-    """Send a test ping to verify ntfy is configured correctly."""
-    return _send(
-        title="Warframe Market Predictor — test",
-        body=(
-            "If you can read this, push notifications are working!\n\n"
-            "Your daily market report will arrive at "
-            f"**{config.REPORT_TIME}** every morning."
-        ),
-        priority="high",
-        tags=["white_check_mark", "chart_with_upwards_trend"],
-    )
-
-
-# ─── Helpers ──────────────────────────────────────────────────────────────────
-
-def _split_message(text: str, max_bytes: int = 3800) -> list[str]:
-    """Split a long message at paragraph boundaries to stay under max_bytes."""
-    if len(text.encode("utf-8")) <= max_bytes:
-        return [text]
-
-    chunks: list[str] = []
-    current_lines: list[str] = []
-    current_size = 0
-
-    for line in text.splitlines(keepends=True):
-        line_size = len(line.encode("utf-8"))
-        if current_size + line_size > max_bytes and current_lines:
-            chunks.append("".join(current_lines))
-            current_lines = []
-            current_size = 0
-        current_lines.append(line)
-        current_size += line_size
-
-    if current_lines:
-        chunks.append("".join(current_lines))
-
-    return chunks
+    payload = {
+        "username":   BOT_NAME,
+        "avatar_url": BOT_AVATAR,
+        "embeds": [{
+            "title":       "✅ Warframe Market Predictor — Connected",
+            "description": (
+                "Push notifications are working correctly!\n"
+                "The daily market report will appear in this channel at **9 AM** every morning.\n\n"
+                "**What you'll see each day:**\n"
+                "🟢 Best items to buy (caught at the price trough)\n"
+                "🔴 Items at peak price to sell\n"
+                "🟡 Items that look bad but are just in a quiet patch"
+            ),
+            "color": COLORS["BUY"],
+            "footer": {"text": "warframe-market-predictor"},
+        }],
+    }
+    return _broadcast(payload)

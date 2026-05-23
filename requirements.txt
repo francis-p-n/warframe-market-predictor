@@ -1,5 +1,8 @@
 httpx>=0.28.1
 apscheduler==3.10.4
 python-dotenv>=1.0.1
-# numpy installed via: conda install numpy
-# (or: pip install numpy --only-binary=:all:)
+scikit-learn>=1.3.0
+# numpy: install via conda (avoids build-from-source issues on Windows):
+#   conda install numpy
+# or via pip with pre-built wheel:
+#   pip install numpy --only-binary=:all:
