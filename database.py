@@ -10,7 +10,7 @@ Structure:
 import csv
 import logging
 import os
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from typing import Optional
 
 import config

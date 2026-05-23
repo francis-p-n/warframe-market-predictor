@@ -112,7 +112,7 @@ def _buy_text(feat: np.ndarray, sig: "ItemSignal") -> tuple[str, str]:
             f"Good window to buy now and sell over the weekend."
         )
     else:
-        headline = f"Below average price with improving momentum"
+        headline = "Below average price with improving momentum"
         detail   = (
             f"**{sig.item_name}** is at {sig.current_price:.0f}p — about {pct_below:.0f}% below its "
             f"30-day average of {sig.avg_30d:.0f}p. Short-term trend is starting to turn positive. "
@@ -148,7 +148,7 @@ def _sell_text(feat: np.ndarray, sig: "ItemSignal") -> tuple[str, str]:
             f"usually follows. Good time to exit."
         )
     else:
-        headline = f"Above normal price — good time to sell"
+        headline = "Above normal price — good time to sell"
         detail   = (
             f"**{sig.item_name}** at {sig.current_price:.0f}p is {pct_above:.0f}% above its "
             f"30-day average. Trend is pointing down. List it while buyers are still paying this much."

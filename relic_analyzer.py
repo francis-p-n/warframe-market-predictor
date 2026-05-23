@@ -15,7 +15,7 @@ drops are all valuable (maximises average value per run, no Void Traces spent).
 
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 import database as db

@@ -9,7 +9,6 @@ long fetch cycles run quietly without hammering the server.
 import time
 import logging
 import random
-from datetime import date
 from typing import Optional
 
 import httpx
