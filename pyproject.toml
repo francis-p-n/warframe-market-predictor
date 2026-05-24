@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-warframe-predictor = "main:main"
+warframe-predictor = "predictor.main:main"
 
 [project.optional-dependencies]
 dev = [
@@ -28,7 +28,7 @@ dev = [
 [tool.ruff]
 target-version = "py311"
 line-length    = 100
-src            = ["."]
+src            = ["src"]
 exclude        = [".git", "__pycache__", "data", ".venv", "venv"]
 
 [tool.ruff.lint]

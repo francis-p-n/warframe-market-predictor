@@ -18,8 +18,8 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-import database as db
-from relic_scraper import FARM_LOCATIONS, RELIC_PROBS, get_relics
+from predictor.core import database as db
+from predictor.relics.relic_scraper import FARM_LOCATIONS, RELIC_PROBS, get_relics
 
 log = logging.getLogger(__name__)
 

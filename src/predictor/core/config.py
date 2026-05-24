@@ -43,12 +43,15 @@ MAX_ITEMS_PER_SECTION: int   = int(_optional("MAX_ITEMS_PER_SECTION", "10"))
 MIN_SIGNAL_CONFIDENCE: float = float(_optional("MIN_SIGNAL_CONFIDENCE", "0.55"))
 
 # ─── Warframe Market API ───────────────────────────────────────────────────────
-WF_API_BASE     = "https://api.warframe.market/v1"
+WF_API_BASE     = "https://api.warframe.market/v1"   # statistics endpoint still v1
+WF_API_BASE_V2  = "https://api.warframe.market/v2"   # items list moved to v2
 WF_API_PLATFORM = "pc"
 WF_API_LANGUAGE = "en"
 WF_API_RATE_LIMIT = 2.0    # req/s (API allows 3, we stay safe)
 WF_API_TIMEOUT    = 20     # seconds
 
 # ─── Storage ───────────────────────────────────────────────────────────────────
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-DB_PATH  = os.path.join(DATA_DIR, "warframe_prices.db")   # kept for legacy ref
+from pathlib import Path
+DATA_DIR = str(Path(__file__).parent.parent.parent.parent / "data")
+DB_PATH  = os.path.join(DATA_DIR, "warframe_prices.db")
+

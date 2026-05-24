@@ -8,7 +8,7 @@ Also provides a search helper to find valid item URLs from partial names.
 import logging
 from typing import Optional
 
-import database as db
+from predictor.core import database as db
 
 log = logging.getLogger(__name__)
 

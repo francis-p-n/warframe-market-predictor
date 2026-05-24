@@ -24,9 +24,9 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 
-import config
-import database as db
-from features import MIN_DAYS_REQUIRED, extract_features
+from predictor.core import config
+from predictor.core import database as db
+from predictor.market.features import MIN_DAYS_REQUIRED, extract_features
 
 log = logging.getLogger(__name__)
 

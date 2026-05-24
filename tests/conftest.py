@@ -8,8 +8,8 @@ from unittest.mock import patch
 
 import pytest
 
-# ─── Add project root to sys.path ─────────────────────────────────────────────
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# ─── Add project root and src/ to sys.path ──────────────────────────────────
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
 # ─── Environment mock (avoids needing a real .env) ────────────────────────────
@@ -30,14 +30,10 @@ def mock_env(tmp_path, monkeypatch):
 
     # Reload config with patched env
     import importlib
-    import config
+    from predictor.core import config
     monkeypatch.setattr(config, "DATA_DIR", data_dir)
     monkeypatch.setattr(config, "DB_PATH", str(tmp_path / "data" / "test.db"))
 
-    import database
-    monkeypatch.setattr(database, "PRICES_DIR",       str(tmp_path / "data" / "prices"))
-    monkeypatch.setattr(database, "WATCHLIST_FILE",   str(tmp_path / "data" / "watchlist.csv"))
-    monkeypatch.setattr(database, "ITEMS_CACHE_FILE", str(tmp_path / "data" / "items_cache.csv"))
-
+    from predictor.core import database
     database.init_db()
     return tmp_path

@@ -15,8 +15,8 @@ from typing import Optional
 
 import httpx
 
-import config
-from analyzer import AnalysisReport, ItemSignal
+from predictor.core import config
+from predictor.market.analyzer import AnalysisReport, ItemSignal
 
 log = logging.getLogger(__name__)
 
@@ -107,7 +107,7 @@ def _section_embed(
 def _relic_embed() -> Optional[dict]:
     """Build the relic farming recommendations embed."""
     try:
-        from relic_analyzer import get_top_relics
+        from predictor.relics.relic_analyzer import get_top_relics
         recs = get_top_relics(n=5)
     except Exception as exc:
         log.warning("Relic analysis failed: %s", exc)

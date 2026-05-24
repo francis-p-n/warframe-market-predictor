@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from features import MIN_DAYS_REQUIRED, compute_rsi, extract_features
+from predictor.market.features import MIN_DAYS_REQUIRED, compute_rsi, extract_features
 
 
 # ─── RSI ──────────────────────────────────────────────────────────────────────

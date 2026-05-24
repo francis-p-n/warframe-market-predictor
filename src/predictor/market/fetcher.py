@@ -13,8 +13,8 @@ from typing import Optional
 
 import httpx
 
-import config
-import database as db
+from predictor.core import config
+from predictor.core import database as db
 
 log = logging.getLogger(__name__)
 
@@ -42,14 +42,18 @@ def _throttle() -> None:
 
 def _get(path: str, retries: int = 3) -> Optional[dict]:
     """
-    GET a warframe.market API path, respecting rate limits.
+    GET a warframe.market v1 API path, respecting rate limits.
     Returns parsed JSON or None on persistent failure.
     """
     url = f"{config.WF_API_BASE}{path}"
     for attempt in range(1, retries + 1):
         _throttle()
         try:
-            with httpx.Client(timeout=config.WF_API_TIMEOUT, headers=_HEADERS) as client:
+            with httpx.Client(
+                timeout=config.WF_API_TIMEOUT,
+                headers=_HEADERS,
+                trust_env=False,   # bypass system proxy to avoid timeouts
+            ) as client:
                 resp = client.get(url)
             if resp.status_code == 200:
                 return resp.json()
@@ -67,24 +71,57 @@ def _get(path: str, retries: int = 3) -> Optional[dict]:
     return None
 
 
+def _get_v2(path: str, retries: int = 3) -> Optional[dict]:
+    """
+    GET a warframe.market v2 API path (items list lives here now).
+    Returns parsed JSON or None on persistent failure.
+    """
+    url = f"{config.WF_API_BASE_V2}{path}"
+    for attempt in range(1, retries + 1):
+        _throttle()
+        try:
+            with httpx.Client(
+                timeout=config.WF_API_TIMEOUT,
+                headers=_HEADERS,
+                trust_env=False,
+            ) as client:
+                resp = client.get(url)
+            if resp.status_code == 200:
+                return resp.json()
+            if resp.status_code == 429:
+                backoff = 10 * attempt
+                log.warning("Rate limited by API (v2). Backing off %ds.", backoff)
+                time.sleep(backoff)
+                continue
+            log.warning("API v2 %s returned HTTP %d", url, resp.status_code)
+            return None
+        except httpx.RequestError as exc:
+            log.warning("Request error v2 (attempt %d/%d): %s", attempt, retries, exc)
+            time.sleep(2 ** attempt)
+    log.error("All retries failed for %s", url)
+    return None
+
+
 # ─── Item List ─────────────────────────────────────────────────────────────────
 
 def fetch_all_items() -> list[dict]:
     """
-    Fetch the full tradable item list from /v1/items.
+    Fetch the full tradable item list from /v2/items.
     Returns a list of {url_name, item_name} dicts.
     """
-    log.info("Fetching full item list from warframe.market…")
-    data = _get("/items")
+    log.info("Fetching full item list from warframe.market (v2)…")
+    data = _get_v2("/items")
     if not data:
         return []
-    items = data.get("payload", {}).get("items", [])
+    items = data.get("data", [])
     log.info("Received %d items from API.", len(items))
-    return [
-        {"url_name": i["url_name"], "item_name": i["item_name"]}
-        for i in items
-        if "url_name" in i and "item_name" in i
-    ]
+    result = []
+    for i in items:
+        slug      = i.get("slug")
+        i18n_name = i.get("i18n", {}).get("en", {}).get("name")
+        if slug and i18n_name:
+            result.append({"url_name": slug, "item_name": i18n_name})
+    return result
 
 
 def refresh_items_cache() -> int:

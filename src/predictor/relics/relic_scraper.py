@@ -32,7 +32,7 @@ from typing import Optional
 
 import httpx
 
-import config
+from predictor.core import config
 
 log = logging.getLogger(__name__)
 

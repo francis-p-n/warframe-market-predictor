@@ -18,7 +18,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-import config
+from predictor.core import config
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ def _make_scheduler() -> BlockingScheduler:
 # ─── Job Wrappers ─────────────────────────────────────────────────────────────
 
 def _fetch_job():
-    from fetcher import run_fetch_cycle
+    from predictor.market.fetcher import run_fetch_cycle
     try:
         run_fetch_cycle()
     except Exception as exc:
@@ -55,7 +55,7 @@ def _fetch_job():
 
 
 def _refresh_job():
-    from fetcher import refresh_items_cache
+    from predictor.market.fetcher import refresh_items_cache
     try:
         count = refresh_items_cache()
         log.info("Items cache refreshed: %d items.", count)
@@ -64,8 +64,8 @@ def _refresh_job():
 
 
 def _report_job():
-    from analyzer import run_analysis
-    from notifier import send_daily_report
+    from predictor.market.analyzer import run_analysis
+    from predictor.service.notifier import send_daily_report
     try:
         report = run_analysis()
         send_daily_report(report)
@@ -75,7 +75,7 @@ def _report_job():
 
 def _relic_job():
     """Refresh relic drop tables weekly so we stay current after hotfixes."""
-    from relic_scraper import refresh_relic_cache
+    from predictor.relics.relic_scraper import refresh_relic_cache
     try:
         count = refresh_relic_cache()
         log.info("Relic cache refreshed: %d relics.", count)
@@ -84,7 +84,7 @@ def _relic_job():
 
 
 def _prune_job():
-    import database as db
+    from predictor.core import database as db
     try:
         removed = db.prune_old_snapshots(keep_days=90)
         log.info("Pruned %d old price rows.", removed)
@@ -94,7 +94,7 @@ def _prune_job():
 
 def _retrain_job():
     """Re-train the SVM model weekly with accumulated data."""
-    from analyzer import retrain
+    from predictor.market.analyzer import retrain
     try:
         ok = retrain()
         log.info("Model retrain: %s", "success" if ok else "insufficient data")

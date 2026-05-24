@@ -69,15 +69,15 @@ def _build_parser() -> argparse.ArgumentParser:
 # ─── Commands ─────────────────────────────────────────────────────────────────
 
 def cmd_test_notify():
-    from notifier import send_test_message
+    from predictor.service.notifier import send_test_message
     ok = send_test_message()
     print("✅ Test message sent to Discord!" if ok else "❌ Failed — check DISCORD_WEBHOOK_URLS in .env")
     sys.exit(0 if ok else 1)
 
 
 def cmd_run_report():
-    from analyzer import run_analysis
-    from notifier import send_daily_report
+    from predictor.market.analyzer import run_analysis
+    from predictor.service.notifier import send_daily_report
     report = run_analysis()
     print(f"Analysis: {len(report.buys)} buys, {len(report.sells)} sells, "
           f"{len(report.holds)} holds from {report.total_scanned} items "
@@ -87,29 +87,29 @@ def cmd_run_report():
 
 
 def cmd_fetch_now():
-    from fetcher import run_fetch_cycle
+    from predictor.market.fetcher import run_fetch_cycle
     count = run_fetch_cycle()
     print(f"✅ Fetched data for {count} items.")
     sys.exit(0)
 
 
 def cmd_refresh_items():
-    from fetcher import refresh_items_cache
+    from predictor.market.fetcher import refresh_items_cache
     count = refresh_items_cache()
     print(f"✅ Items cache updated: {count} items.")
     sys.exit(0)
 
 
 def cmd_refresh_relics():
-    from relic_scraper import refresh_relic_cache
+    from predictor.relics.relic_scraper import refresh_relic_cache
     count = refresh_relic_cache()
     print(f"✅ Relic drop tables updated: {count} relics.")
     sys.exit(0)
 
 
 def cmd_relics():
-    from relic_analyzer import get_top_relics
-    from relic_scraper import cache_age_hours
+    from predictor.relics.relic_analyzer import get_top_relics
+    from predictor.relics.relic_scraper import cache_age_hours
     recs = get_top_relics(n=10)
     age  = cache_age_hours()
     age_str = f"{age:.0f}h ago" if age is not None else "never"
@@ -133,13 +133,13 @@ def cmd_relics():
 
 
 def cmd_watchlist():
-    import watchlist
+    from predictor.market import watchlist
     watchlist.print_watchlist()
     sys.exit(0)
 
 
 def cmd_watchlist_add(name: str):
-    import watchlist
+    from predictor.market import watchlist
     result = watchlist.add_item(name)
     print(f"✅ '{result}' added to watchlist." if result else
           f"❌ Could not find '{name}'. Try --search first.")
@@ -147,7 +147,7 @@ def cmd_watchlist_add(name: str):
 
 
 def cmd_watchlist_remove(name: str):
-    import watchlist
+    from predictor.market import watchlist
     result = watchlist.remove_item(name)
     print(f"✅ '{result}' removed from watchlist." if result else
           f"❌ '{name}' not found in watchlist.")
@@ -155,13 +155,13 @@ def cmd_watchlist_remove(name: str):
 
 
 def cmd_search(query: str):
-    import watchlist
+    from predictor.market import watchlist
     watchlist.print_search_results(query)
     sys.exit(0)
 
 
 def cmd_retrain():
-    from analyzer import retrain
+    from predictor.market.analyzer import retrain
     ok = retrain()
     print("✅ Model retrained successfully." if ok else
           "⚠️  Not enough data to train yet — keep the service running to collect more.")
@@ -169,9 +169,9 @@ def cmd_retrain():
 
 
 def cmd_status():
-    import config
-    import database as db
-    from relic_scraper import cache_age_hours
+    from predictor.core import config
+    from predictor.core import database as db
+    from predictor.relics.relic_scraper import cache_age_hours
 
     stats   = db.get_storage_stats()
     relic_h = cache_age_hours()
@@ -198,7 +198,7 @@ def cmd_status():
 def main():
     args = _build_parser().parse_args()
 
-    import database as db
+    from predictor.core import database as db
     db.init_db()
 
     if args.test_notify:
@@ -227,7 +227,7 @@ def main():
         cmd_status()
     else:
         # ── Background service ────────────────────────────────────────────────
-        import config
+        from predictor.core import config
         log.info("=" * 60)
         log.info("  Warframe Market Predictor starting")
         log.info("  Report time    : %s daily", config.REPORT_TIME)
@@ -238,17 +238,17 @@ def main():
         # Bootstrap item list on first run
         if not db.get_all_cached_items():
             log.info("First run — fetching item list…")
-            from fetcher import refresh_items_cache
+            from predictor.market.fetcher import refresh_items_cache
             refresh_items_cache()
 
         # Bootstrap relic data on first run
-        from relic_scraper import cache_age_hours, refresh_relic_cache
+        from predictor.relics.relic_scraper import cache_age_hours, refresh_relic_cache
         if cache_age_hours() is None:
             log.info("First run — fetching relic drop tables…")
             refresh_relic_cache()
 
         try:
-            import scheduler
+            from predictor.service import scheduler
             scheduler.start(run_fetch_immediately=True)
         except (KeyboardInterrupt, SystemExit):
             log.info("Predictor stopped.")
