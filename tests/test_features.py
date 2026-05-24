@@ -55,7 +55,7 @@ class TestExtractFeatures:
         volumes = _make_volumes(MIN_DAYS_REQUIRED + 5)
         feat = extract_features(prices, volumes)
         assert feat is not None
-        assert feat.shape == (10,)
+        assert feat.shape == (13,)
 
     def test_no_nans_or_infs(self):
         prices  = _make_prices(50)

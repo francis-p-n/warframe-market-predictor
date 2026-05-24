@@ -23,7 +23,7 @@ def search_items(query: str) -> list[dict]:
     return [
         i for i in all_items
         if query_lower in i["item_name"].lower()
-           or query_lower in i["item_url"].lower()
+           or query_lower in i.get("url_name", i.get("item_url", "")).lower()
     ]
 
 
@@ -43,7 +43,7 @@ def add_item(query: str) -> Optional[str]:
     exact = [m for m in matches if m["item_name"].lower() == query.lower()]
     chosen = exact[0] if exact else sorted(matches, key=lambda m: len(m["item_name"]))[0]
 
-    added = db.add_to_watchlist(chosen["item_url"], chosen["item_name"])
+    added = db.add_to_watchlist(chosen.get("url_name", chosen.get("item_url", "")), chosen["item_name"])
     if added:
         log.info("Added '%s' to watchlist.", chosen["item_name"])
     else:

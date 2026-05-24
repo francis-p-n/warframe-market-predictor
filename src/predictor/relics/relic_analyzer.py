@@ -69,7 +69,7 @@ def _build_price_map() -> dict[str, float]:
     cached = db.get_all_cached_items()
 
     for item in cached:
-        snaps = db.get_snapshots(item["item_url"], days=PRICE_LOOKBACK_DAYS)
+        snaps = db.get_snapshots(item.get("url_name", item.get("item_url", "")), days=PRICE_LOOKBACK_DAYS)
         if not snaps:
             continue
         medians = [s["median"] for s in snaps if s["median"] and s["median"] > 0]

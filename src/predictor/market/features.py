@@ -35,6 +35,9 @@ FEATURE_NAMES = [
     "vol_trend",
     "volatility_14",
     "day_of_week",
+    "macd_hist",        # new
+    "bollinger_pos",    # new
+    "ema_ratio",        # new
 ]
 
 
@@ -56,6 +59,46 @@ def compute_rsi(prices: np.ndarray, period: int = 14) -> float:
         return 100.0
     rs = avg_gain / avg_loss
     return 100.0 - (100.0 / (1.0 + rs))
+
+
+# ─── Stock Market (SKM) Indicators ─────────────────────────────────────────────
+
+def compute_ema(prices: np.ndarray, span: int) -> float:
+    """Exponential Moving Average."""
+    if len(prices) < span:
+        return float(np.mean(prices)) if len(prices) > 0 else 0.0
+    alpha = 2 / (span + 1)
+    ema = prices[0]
+    for p in prices[1:]:
+        ema = (p - ema) * alpha + ema
+    return float(ema)
+
+def compute_macd(prices: np.ndarray, fast: int = 12, slow: int = 26, signal: int = 9) -> tuple[float, float, float]:
+    """MACD, Signal Line, and Histogram."""
+    if len(prices) < slow + signal:
+        return 0.0, 0.0, 0.0
+    
+    # Calculate MACD line for the last `signal` periods to compute the signal line
+    macd_line = []
+    for i in range(len(prices) - signal, len(prices) + 1):
+        window = prices[:i]
+        ema_fast = compute_ema(window, fast)
+        ema_slow = compute_ema(window, slow)
+        macd_line.append(ema_fast - ema_slow)
+        
+    macd_current = macd_line[-1]
+    signal_current = compute_ema(np.array(macd_line), signal)
+    hist = macd_current - signal_current
+    return macd_current, signal_current, hist
+
+def compute_bollinger_bands(prices: np.ndarray, period: int = 20, num_std: float = 2.0) -> tuple[float, float, float]:
+    """Returns (Lower Band, Middle Band, Upper Band)."""
+    if len(prices) < period:
+        return 0.0, 0.0, 0.0
+    window = prices[-period:]
+    sma = float(np.mean(window))
+    std = float(np.std(window))
+    return sma - (num_std * std), sma, sma + (num_std * std)
 
 
 # ─── Main Feature Extractor ────────────────────────────────────────────────────
@@ -170,6 +213,21 @@ def extract_features(
         day_of_week = date.today().weekday()
         day_of_week = 1.0 if day_of_week >= 4 else (0.5 if day_of_week >= 2 else 0.0)
 
+    # ── 11. MACD Histogram ────────────────────────────────────────────────────
+    _, _, macd_hist = compute_macd(p)
+    
+    # ── 12. Bollinger Band Position (0 = at lower band, 1 = at upper band) ────
+    bb_low, bb_mid, bb_high = compute_bollinger_bands(p)
+    if bb_high - bb_low > 0:
+        bollinger_pos = (current - bb_low) / (bb_high - bb_low)
+    else:
+        bollinger_pos = 0.5
+        
+    # ── 13. EMA Ratio (Short vs Long term momentum) ───────────────────────────
+    ema_short = compute_ema(p, 9)
+    ema_long  = compute_ema(p, 21)
+    ema_ratio = (ema_short / ema_long) - 1.0 if ema_long > 0 else 0.0
+
     # ── Assemble ───────────────────────────────────────────────────────────────
     feat = np.array([
         rsi_now,
@@ -182,6 +240,9 @@ def extract_features(
         vol_trend,
         volatility,
         day_of_week,
+        macd_hist,
+        bollinger_pos,
+        ema_ratio,
     ], dtype=float)
 
     if np.isnan(feat).any() or np.isinf(feat).any():

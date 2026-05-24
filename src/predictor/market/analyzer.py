@@ -74,31 +74,31 @@ class AnalysisReport:
 
 def _buy_text(feat: np.ndarray, sig: "ItemSignal") -> tuple[str, str]:
     """Return (headline, detail) for a BUY signal in plain English."""
-    rsi, slope7, slope_decel, rsi_div, to_ma30, local_min, vol_acc, vol_trend, *_ = feat
+    rsi, slope7, slope_decel, rsi_div, to_ma30, local_min, vol_acc, vol_trend, vol_14, dow, macd_hist, bb_pos, ema_ratio = feat
 
     pct_below = abs(to_ma30)
     near_bottom = local_min < 0.2   # within bottom 20% of 30d range
     diverging   = rsi_div > 3
     decelerating = slope_decel > 0.1
     accumulating = vol_acc > 1.3
-    weekend_boost = feat[9] >= 1.0
+    weekend_boost = dow >= 1.0
+    macd_cross = macd_hist > 0
 
-    if near_bottom and diverging:
+    if near_bottom and (diverging or macd_cross):
         headline = "Price at the bottom — buyers are quietly moving in"
         detail   = (
             f"**{sig.item_name}** is sitting near its lowest price in a month ({sig.current_price:.0f}p vs "
-            f"{sig.avg_30d:.0f}p average). Trading interest is actually picking up even as the price "
-            f"stays low — classic sign that the drop is almost over. Good entry point."
+            f"{sig.avg_30d:.0f}p average). Momentum indicators like MACD and RSI are turning positive, "
+            f"a classic sign the drop is almost over. Good entry point."
         )
-    elif near_bottom and decelerating:
-        headline = "Price dip is slowing down — looks like it's bottoming out"
+    elif bb_pos < 0.1 and decelerating:
+        headline = "Price hit the lower Bollinger Band and is stabilizing"
         detail   = (
-            f"**{sig.item_name}** has been dropping but the rate of decline is flattening out at "
-            f"{sig.current_price:.0f}p (about {pct_below:.0f}% below its usual price). "
-            f"This pattern often means the bottom is in. Buy before it bounces."
+            f"**{sig.item_name}** dropped to {sig.current_price:.0f}p, hitting extreme oversold levels on the "
+            f"Bollinger Bands. The decline is now flattening out, which often means the bottom is in. Buy before it bounces."
         )
-    elif accumulating and local_min < 0.35:
-        headline = "Low price, rising trade volume — someone's stocking up"
+    elif accumulating and ema_ratio > 0:
+        headline = "Short-term moving averages crossing up + rising trade volume"
         detail   = (
             f"**{sig.item_name}** is priced at {sig.current_price:.0f}p with noticeably more "
             f"buy activity than sell activity lately. Players are accumulating at this price. "
@@ -122,22 +122,21 @@ def _buy_text(feat: np.ndarray, sig: "ItemSignal") -> tuple[str, str]:
 
 
 def _sell_text(feat: np.ndarray, sig: "ItemSignal") -> tuple[str, str]:
-    rsi, slope7, slope_decel, rsi_div, to_ma30, local_min, vol_acc, vol_trend, *_ = feat
+    rsi, slope7, slope_decel, rsi_div, to_ma30, local_min, vol_acc, vol_trend, vol_14, dow, macd_hist, bb_pos, ema_ratio = feat
     pct_above = to_ma30
     near_top = local_min > 0.8   # within top 20% of 30d range
 
-    if near_top and rsi > 65:
+    if near_top and bb_pos > 0.9 and rsi > 65:
         headline = "Price spiked hard — cash out before it drops"
         detail   = (
-            f"**{sig.item_name}** is at {sig.current_price:.0f}p, which is {pct_above:.0f}% above "
-            f"its normal price and near its highest point in a month. RSI at {rsi:.0f} confirms "
-            f"it's overbought. Sellers who list now will get the best price."
+            f"**{sig.item_name}** is at {sig.current_price:.0f}p, breaking the upper Bollinger Band. "
+            f"RSI at {rsi:.0f} confirms it's heavily overbought. Sellers who list now will get the best price."
         )
-    elif slope7 < -0.3 and near_top:
-        headline = "Was at peak, now starting to slide — sell soon"
+    elif macd_hist < 0 and near_top:
+        headline = "MACD crossed bearish — upward trend is exhausted"
         detail   = (
-            f"**{sig.item_name}** hit a high recently ({sig.current_price:.0f}p) but the trend is "
-            f"turning down. It's still above average by {pct_above:.0f}% — you can still get a "
+            f"**{sig.item_name}** hit a high recently ({sig.current_price:.0f}p) but the MACD momentum "
+            f"is turning down. It's still above average by {pct_above:.0f}% — you can still get a "
             f"good price if you list it now before the drop accelerates."
         )
     elif vol_trend < 0.7 and near_top:
@@ -157,7 +156,7 @@ def _sell_text(feat: np.ndarray, sig: "ItemSignal") -> tuple[str, str]:
 
 
 def _hold_text(feat: np.ndarray, sig: "ItemSignal") -> tuple[str, str]:
-    rsi, slope7, slope_decel, rsi_div, to_ma30, local_min, vol_acc, vol_trend, *_ = feat
+    rsi, slope7, slope_decel, rsi_div, to_ma30, local_min, vol_acc, vol_trend, vol_14, dow, macd_hist, bb_pos, ema_ratio = feat
     headline = "Price is down but the market is quiet — not a real crash"
     detail   = (
         f"**{sig.item_name}** has slipped to {sig.current_price:.0f}p but trading volume is very low "
@@ -382,7 +381,7 @@ def _predict_rules(item: dict, snaps: list[dict]) -> Optional[ItemSignal]:
     if feat is None:
         return None
 
-    rsi, slope7, slope_decel, rsi_div, to_ma30, local_min, vol_acc, vol_trend, volatility, dow = feat
+    rsi, slope7, slope_decel, rsi_div, to_ma30, local_min, vol_acc, vol_trend, volatility, dow, macd_hist, bb_pos, ema_ratio = feat
 
     current = next((p for p in reversed(prices) if p is not None), None)
     if not current or current <= 0:
@@ -398,23 +397,25 @@ def _predict_rules(item: dict, snaps: list[dict]) -> Optional[ItemSignal]:
 
     # ── BUY: must be near bottom AND show reversal signs ──────────────────────
     near_bottom  = local_min < 0.25                    # bottom quartile of 30d range
-    reversal_ok  = (slope_decel > 0.1) or (rsi_div > 3) or (vol_acc > 1.3)
+    reversal_ok  = (slope_decel > 0.1) or (rsi_div > 3) or (vol_acc > 1.3) or (macd_hist > 0)
     if near_bottom and reversal_ok and to_ma30 < -3.0:
         signal     = "BUY"
         confidence = min(1.0,
-            0.35 * min(1.0, (1.0 - local_min) * 2) +
-            0.25 * min(1.0, abs(to_ma30) / 15.0) +
-            0.20 * min(1.0, slope_decel if slope_decel > 0 else 0) +
-            0.20 * min(1.0, rsi_div / 10.0 if rsi_div > 0 else vol_acc / 3.0)
+            0.30 * min(1.0, (1.0 - local_min) * 2) +
+            0.20 * min(1.0, abs(to_ma30) / 15.0) +
+            0.15 * min(1.0, slope_decel if slope_decel > 0 else 0) +
+            0.15 * min(1.0, rsi_div / 10.0 if rsi_div > 0 else vol_acc / 3.0) +
+            0.20 * (1.0 if macd_hist > 0 else 0.0) # Bonus for MACD crossover
         )
 
     # ── SELL: near peak, trend turning, still liquid ───────────────────────────
     elif local_min > 0.75 and to_ma30 > 5.0 and vol_trend >= 0.7:
         signal     = "SELL"
         confidence = min(1.0,
-            0.40 * min(1.0, local_min) +
-            0.35 * min(1.0, to_ma30 / 20.0) +
-            0.25 * min(1.0, vol_trend)
+            0.30 * min(1.0, local_min) +
+            0.30 * min(1.0, to_ma30 / 20.0) +
+            0.20 * min(1.0, vol_trend) +
+            0.20 * (1.0 if macd_hist < 0 else 0.0) # Bonus for bearish MACD
         )
 
     # ── HOLD: falling but thin market — likely temporary ──────────────────────

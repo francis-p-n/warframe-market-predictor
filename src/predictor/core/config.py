@@ -53,5 +53,6 @@ WF_API_TIMEOUT    = 20     # seconds
 # ─── Storage ───────────────────────────────────────────────────────────────────
 from pathlib import Path
 DATA_DIR = str(Path(__file__).parent.parent.parent.parent / "data")
-DB_PATH  = os.path.join(DATA_DIR, "warframe_prices.db")
-
+PRICES_DIR = os.path.join(DATA_DIR, "prices")
+ITEMS_CACHE_FILE = os.path.join(DATA_DIR, "items_cache.csv")
+WATCHLIST_FILE = os.path.join(DATA_DIR, "watchlist.csv")

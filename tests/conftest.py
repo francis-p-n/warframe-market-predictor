@@ -31,8 +31,10 @@ def mock_env(tmp_path, monkeypatch):
     # Reload config with patched env
     import importlib
     from predictor.core import config
-    monkeypatch.setattr(config, "DATA_DIR", data_dir)
-    monkeypatch.setattr(config, "DB_PATH", str(tmp_path / "data" / "test.db"))
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setattr(config, "PRICES_DIR", str(tmp_path / "data" / "prices"))
+    monkeypatch.setattr(config, "ITEMS_CACHE_FILE", str(tmp_path / "data" / "items_cache.csv"))
+    monkeypatch.setattr(config, "WATCHLIST_FILE", str(tmp_path / "data" / "watchlist.csv"))
 
     from predictor.core import database
     database.init_db()
