@@ -47,7 +47,7 @@ WF_API_BASE     = "https://api.warframe.market/v1"   # statistics endpoint still
 WF_API_BASE_V2  = "https://api.warframe.market/v2"   # items list moved to v2
 WF_API_PLATFORM = "pc"
 WF_API_LANGUAGE = "en"
-WF_API_RATE_LIMIT = 2.0    # req/s (API allows 3, we stay safe)
+WF_API_RATE_LIMIT = 3.0    # req/s (API allows 3, we stay safe)
 WF_API_TIMEOUT    = 20     # seconds
 
 # ─── Storage ───────────────────────────────────────────────────────────────────

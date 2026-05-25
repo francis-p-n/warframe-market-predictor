@@ -350,6 +350,12 @@ def _predict_svm(
     if signal == "HOLD" and confidence < 0.72:
         return None   # only report very confident holds
 
+    local_min_prox = feat[5]
+    if signal == "BUY" and local_min_prox > 0.05:
+        return None   # Strict enforcement: must be at a trough (bottom 5% of 30d range)
+    if signal == "SELL" and local_min_prox < 0.95:
+        return None   # Strict enforcement: must be at a peak (top 5% of 30d range)
+
     p30      = [p for p in prices[-30:] if p is not None]
     avg_30d  = float(np.mean(p30)) if p30 else current
     low_30d  = float(np.min(p30))  if p30 else current
@@ -412,7 +418,7 @@ def _predict_rules(item: dict, snaps: list[dict]) -> Optional[ItemSignal]:
     confidence = 0.0
 
     # ── BUY: must be near bottom AND show reversal signs ──────────────────────
-    near_bottom  = local_min < 0.25                    # bottom quartile of 30d range
+    near_bottom  = local_min <= 0.05                   # STRICT trough: bottom 5% of 30d range
     reversal_ok  = (slope_decel > 0.1) or (rsi_div > 3) or (vol_acc > 1.3) or (macd_hist > 0)
     if near_bottom and reversal_ok and to_ma30 < -3.0:
         signal     = "BUY"
@@ -425,7 +431,7 @@ def _predict_rules(item: dict, snaps: list[dict]) -> Optional[ItemSignal]:
         )
 
     # ── SELL: near peak, trend turning, still liquid ───────────────────────────
-    elif local_min > 0.75 and to_ma30 > 5.0 and vol_trend >= 0.7:
+    elif local_min >= 0.95 and to_ma30 > 5.0 and vol_trend >= 0.7:
         signal     = "SELL"
         confidence = min(1.0,
             0.30 * min(1.0, local_min) +

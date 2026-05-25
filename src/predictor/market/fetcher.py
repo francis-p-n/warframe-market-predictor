@@ -9,6 +9,8 @@ long fetch cycles run quietly without hammering the server.
 import time
 import logging
 import random
+import threading
+import concurrent.futures
 from typing import Optional
 
 import httpx
@@ -29,15 +31,20 @@ _HEADERS = {
 _MIN_INTERVAL = 1.0 / config.WF_API_RATE_LIMIT   # seconds between requests
 _last_request_at: float = 0.0
 
+_rate_limit_lock = threading.Lock()
 
 def _throttle() -> None:
     """Block until the minimum inter-request interval has elapsed."""
     global _last_request_at
-    elapsed = time.monotonic() - _last_request_at
-    wait = _MIN_INTERVAL - elapsed
-    if wait > 0:
-        time.sleep(wait)
-    _last_request_at = time.monotonic()
+    with _rate_limit_lock:
+        now = time.monotonic()
+        elapsed = now - _last_request_at
+        wait = _MIN_INTERVAL - elapsed
+        if wait > 0:
+            time.sleep(wait)
+            _last_request_at = time.monotonic()
+        else:
+            _last_request_at = now
 
 
 def _get(path: str, retries: int = 3) -> Optional[dict]:
@@ -168,6 +175,25 @@ def _parse_daily_stats(raw_stats: list[dict]) -> list[dict]:
 
 # ─── Full Fetch Cycle ──────────────────────────────────────────────────────────
 
+def _process_item(item: dict, today_str: str) -> bool:
+    url = item["item_url"]
+    snaps = db.get_snapshots(url, days=1)
+    if any(s.get("snap_date", "")[:10] == today_str for s in snaps):
+        log.debug("Skipping %s — already have today's snapshot.", url)
+        return False
+
+    raw = fetch_item_statistics(url)
+    if not raw:
+        log.warning("No data for %s", url)
+        return False
+
+    daily = _parse_daily_stats(raw)
+    if not daily:
+        return False
+
+    db.save_snapshots(url, daily)
+    return True
+
 def run_fetch_cycle() -> int:
     """
     Fetch price statistics for all tracked items (watchlist + top-volume).
@@ -182,32 +208,19 @@ def run_fetch_cycle() -> int:
         return 0
 
     log.info("Starting fetch cycle for %d tracked items…", len(tracked))
+    
+    import datetime
+    today_str = datetime.date.today().isoformat()
+    
     updated = 0
-
-    for item in tracked:
-        url = item["item_url"]
-        name = item["item_name"]
-
-        import datetime
-        today_str = datetime.date.today().isoformat()
-        snaps = db.get_snapshots(url, days=1)
-        if any(s.get("snap_date", "")[:10] == today_str for s in snaps):
-            log.debug("Skipping %s — already have today's snapshot.", url)
-            continue
-
-        raw = fetch_item_statistics(url)
-        if not raw:
-            log.warning("No data for %s", url)
-            continue
-
-        daily = _parse_daily_stats(raw)
-        if not daily:
-            continue
-
-        db.save_snapshots(url, daily)
-        updated += 1
-        # Small random jitter so bursts are spread out
-        time.sleep(random.uniform(0.1, 0.4))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        futures = [executor.submit(_process_item, item, today_str) for item in tracked]
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                if future.result():
+                    updated += 1
+            except Exception as exc:
+                log.error("Error processing item: %s", exc)
 
     log.info("Fetch cycle complete. Updated %d / %d items.", updated, len(tracked))
     return updated
