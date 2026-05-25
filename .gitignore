@@ -44,3 +44,7 @@ htmlcov/
 
 #others
 .env.example
+
+# ─── Reports ──────────────────────────────────────────────────────────────────
+.prediction_result.txt
+.test_results.txt

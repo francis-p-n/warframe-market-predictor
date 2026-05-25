@@ -1,0 +1,11 @@
+Warframe Market Prediction Report
+Model used: rule-based
+Items scanned: 2
+==================================================
+
+[ BUYS ] (0)
+
+[ SELLS ] (1)
+ - Abating Link @ 15p (57%)
+
+[ HOLDS ] (0)

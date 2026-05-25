@@ -20,9 +20,16 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
-from sklearn.svm import SVC
+try:
+    from sklearn.pipeline import Pipeline
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.svm import SVC
+    SKLEARN_AVAILABLE = True
+except ImportError:
+    SKLEARN_AVAILABLE = False
+    class Pipeline: pass
+    class StandardScaler: pass
+    class SVC: pass
 
 from predictor.core import config
 from predictor.core import database as db
@@ -187,6 +194,8 @@ def _save_model(pipeline: Pipeline) -> None:
 
 
 def _build_pipeline() -> Pipeline:
+    if not SKLEARN_AVAILABLE:
+        raise RuntimeError("scikit-learn is not installed")
     return Pipeline([
         ("scaler", StandardScaler()),
         ("svm", SVC(
@@ -269,6 +278,10 @@ def train_model() -> Optional[Pipeline]:
     Gather labeled examples from all tracked items and train the SVM.
     Returns the trained pipeline or None if not enough data yet.
     """
+    if not SKLEARN_AVAILABLE:
+        log.warning("scikit-learn is not available. Using rule-based fallback only.")
+        return None
+
     tracked = db.get_tracked_items()
     X_all, y_all = [], []
 
