@@ -182,7 +182,10 @@ def _load_model() -> Optional[Pipeline]:
         with open(MODEL_PATH, "rb") as f:
             return pickle.load(f)
     except Exception as exc:
-        log.warning("Could not load model from %s: %s", MODEL_PATH, exc)
+        if not SKLEARN_AVAILABLE and "sklearn" in str(exc):
+            log.info("Skipping ML model load because scikit-learn is not installed.")
+        else:
+            log.warning("Could not load model from %s: %s", MODEL_PATH, exc)
         return None
 
 
@@ -279,7 +282,7 @@ def train_model() -> Optional[Pipeline]:
     Returns the trained pipeline or None if not enough data yet.
     """
     if not SKLEARN_AVAILABLE:
-        log.warning("scikit-learn is not available. Using rule-based fallback only.")
+        log.info("scikit-learn is not available. Using rule-based fallback only.")
         return None
 
     tracked = db.get_tracked_items()
