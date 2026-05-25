@@ -128,7 +128,7 @@ def refresh_items_cache() -> int:
     """Fetch items list and persist to DB. Returns item count."""
     items = fetch_all_items()
     if items:
-        db.upsert_items_cache(items)
+        db.update_items_cache(items)
     return len(items)
 
 
@@ -188,7 +188,10 @@ def run_fetch_cycle() -> int:
         url = item["item_url"]
         name = item["item_name"]
 
-        if db.count_snapshots_today(url):
+        import datetime
+        today_str = datetime.date.today().isoformat()
+        snaps = db.get_snapshots(url, days=1)
+        if any(s.get("snap_date", "")[:10] == today_str for s in snaps):
             log.debug("Skipping %s — already have today's snapshot.", url)
             continue
 
@@ -201,21 +204,7 @@ def run_fetch_cycle() -> int:
         if not daily:
             continue
 
-        for entry in daily:
-            day = entry.get("datetime", "")[:10]
-            if not day:
-                continue
-            db.upsert_snapshot(
-                item_url=url,
-                item_name=name,
-                snap_date=day,
-                median=entry.get("median"),
-                avg_price=entry.get("avg_price"),
-                min_price=entry.get("min_price"),
-                max_price=entry.get("max_price"),
-                volume=entry.get("volume"),
-            )
-
+        db.save_snapshots(url, daily)
         updated += 1
         # Small random jitter so bursts are spread out
         time.sleep(random.uniform(0.1, 0.4))

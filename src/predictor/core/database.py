@@ -57,17 +57,21 @@ def update_items_cache(items: list[dict]) -> None:
 # ─── Watchlist ─────────────────────────────────────────────────────────────────
 
 def get_tracked_items() -> list[dict]:
-    """Returns a list of dicts with item_url and item_name."""
+    """Returns all cached items so the predictor tracks the entire market."""
+    items = get_all_cached_items()
+    if items:
+        # Standardize key names since items cache uses 'url_name'
+        return [{"item_url": i["url_name"], "item_name": i["item_name"]} for i in items]
     return _load_csv(config.WATCHLIST_FILE)
 
 def get_watchlist() -> list[dict]:
-    return get_tracked_items()
+    return _load_csv(config.WATCHLIST_FILE)
 
 def set_tracked_items(items: list[dict]) -> None:
     _save_csv(config.WATCHLIST_FILE, ["item_url", "item_name"], items)
 
 def add_to_watchlist(item_url: str, item_name: str) -> bool:
-    items = get_tracked_items()
+    items = get_watchlist()
     for i in items:
         if i["item_url"] == item_url:
             return False
@@ -76,7 +80,7 @@ def add_to_watchlist(item_url: str, item_name: str) -> bool:
     return True
 
 def remove_from_watchlist(item_url: str) -> bool:
-    items = get_tracked_items()
+    items = get_watchlist()
     filtered = [i for i in items if i["item_url"] != item_url]
     if len(filtered) == len(items):
         return False

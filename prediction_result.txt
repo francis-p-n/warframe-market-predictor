@@ -1,11 +1,30 @@
 Warframe Market Prediction Report
 Model used: rule-based
-Items scanned: 2
+Items scanned: 3794
 ==================================================
 
-[ BUYS ] (0)
+[ BUYS ] (10)
+ - Aero Agility @ 20p (89%)
+ - Virtuos Strike @ 4p (77%)
+ - Catalyzer Link @ 4p (76%)
+ - Targeting Subsystem @ 10p (74%)
+ - Accelerated Blast @ 2p (73%)
+ - Abyssal Beacon @ 23p (73%)
+ - Adhesive Blast @ 2p (70%)
+ - Eidolon Unairu Lens @ 15p (70%)
+ - Fluctus Barrel @ 10p (67%)
+ - Spectrosiphon @ 10p (65%)
 
-[ SELLS ] (1)
- - Abating Link @ 15p (57%)
+[ SELLS ] (10)
+ - Wolf Sledge Head @ 5p (87%)
+ - Pax Soar @ 39p (80%)
+ - Eidolon Madurai Lens @ 28p (80%)
+ - Decurion Barrel @ 12p (79%)
+ - Acceltra Prime Barrel @ 15p (74%)
+ - Aeolak Stock Blueprint @ 30p (72%)
+ - Zephyr Prime Chassis Blueprint @ 7p (68%)
+ - Airburst Rounds @ 13p (64%)
+ - Fluctus Stock @ 10p (62%)
+ - Viper Wraith @ 60p (58%)
 
 [ HOLDS ] (0)

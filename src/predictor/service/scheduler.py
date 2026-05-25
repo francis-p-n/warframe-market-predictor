@@ -25,7 +25,6 @@ log = logging.getLogger(__name__)
 
 def _make_scheduler() -> BlockingScheduler:
     scheduler = BlockingScheduler(
-        timezone="local",
         job_defaults={
             "coalesce": True,
             "max_instances": 1,
@@ -152,10 +151,7 @@ def start(run_fetch_immediately: bool = True) -> None:
         id="retrain_job", name="Retrain SVM model",
     )
 
-    log.info("Scheduler started. Upcoming jobs:")
-    for job in scheduler.get_jobs():
-        log.info("  %-30s  next: %s", job.name, job.next_run_time)
-
+    log.info("Scheduler started. Running in background...")
     scheduler.start()
 
 
